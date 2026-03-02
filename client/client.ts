@@ -171,19 +171,3 @@ async function verMiembros() {
   }
 }
 
-//////////////////// USO — Descomenta lo que quieras probar ////////////////////
-/*
-  FLUJO RECOMENDADO:
-  1. Primero crea el gimnasio (solo una vez)
-  2. Luego registra miembros
-  3. Puedes ver, alternar, actualizar o eliminar según necesites
-*/
-
-// crearGimnasio(nombre_gimnasio);
-// registrarMiembro("Juan", 30);
-// registrarMiembro("Ana", 60);
-// verMiembros();
-// alternarMembresia("Juan");       // desactiva membresía de Juan
-// actualizarDias("Ana", 90);       // renueva a 90 días
-// eliminarMiembro("Juan");
-// verMiembros();
