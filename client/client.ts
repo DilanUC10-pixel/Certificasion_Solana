@@ -2,197 +2,188 @@
 import { PublicKey } from "@solana/web3.js";
 
 ////////////////// Constantes ////////////////////
-const n_biblioteca = "Alejandria"; // Nombre de la biblioteca
-const owner = pg.wallet.publicKey; // Wallet
+const nombre_gimnasio = "MiGym"; // Cambia esto por el nombre de tu gimnasio
+const owner = pg.wallet.publicKey; // Tu wallet conectada en Solana Playground
 
 //////////////////// Client Test Logs ////////////////////
-console.log("My address:", owner.toString()); // Ver el adress
+console.log("Mi dirección:", owner.toString());
 const balance = await pg.connection.getBalance(owner);
-console.log(`My balance: ${balance / web3.LAMPORTS_PER_SOL} SOL`); // Ver el la cantidad de tokens de solana
-
-//////////////////// FUNCIONES ////////////////////
+console.log(`Mi balance: ${balance / web3.LAMPORTS_PER_SOL} SOL`);
 
 //////////////////// OBTENER PDAs ////////////////////
 /*
-Un PDA representa una cuenta que es controlada por un programa (smart contract), y una de sus principales caracteristicas es no contar 
-con una clave privada con la cual firmar al momento de realizar alguna transaccion (transferencia, escritura o modificacion de un dato) 
-dentro del contrato. En su lugar, emplea direcciones generadas deterministicamente, es decir, recreables a partir de semillas. 
-Las semillas pueden ser varias y de diferentes tipos, puede depender desde un valor predefenidio (como es usualmente el valor de la semilla 1), 
-hasta de direcciones secundarias (como la del caller u otra cuenta).
-
-Es por ello que para llamar desde el front una funcion del Solana Program desplegado es necesario contar con las semillas en su orden y tipo 
-correspondiente. Se recomienda no usar valores sencillos (que no solo dependan de valores predefinidos), pero tampoco se encuentren 
-compuestas de valores redundantes (como el program id o alguna cuenta padre).
+  Las PDAs (Program Derived Addresses) son cuentas controladas por el programa.
+  Se generan de forma determinista a partir de "semillas" (seeds).
+  Usamos las mismas semillas que definimos en el programa Rust para encontrar
+  la dirección correcta de cada cuenta.
 */
-//////////////////// Biblioteca ////////////////////
-function pdaBiblioteca(n_biblioteca) {
+
+//////////////////// PDA Gimnasio ////////////////////
+function pdaGimnasio(nombre_gym) {
   return PublicKey.findProgramAddressSync(
     [
-      Buffer.from("biblioteca"), // Semilla 1: b"biblioteca"
-      Buffer.from(n_biblioteca), // Semilla 2: nombre de la biblioteca  -> String
-      owner.toBuffer(), // Semilla 3: wallet -> Pubkey
+      Buffer.from("gimnasio"),       // Semilla 1: b"gimnasio"
+      Buffer.from(nombre_gym),       // Semilla 2: nombre del gimnasio -> String
+      owner.toBuffer(),              // Semilla 3: wallet del owner -> Pubkey
     ],
-    pg.PROGRAM_ID // Program ID: Siempre va al final
-  );
-}
-//////////////////// Libro ////////////////////
-function pdaLibro(n_libro) {
-  return PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("libro"), // Semilla 1: b"libro"
-      Buffer.from(n_libro), // Semilla 2: nombre del libro: -> String
-      owner.toBuffer(), // Semilla 3: wallet -> Pubkey
-    ],
-    pg.PROGRAM_ID // Program ID: Siempre va al final
+    pg.PROGRAM_ID
   );
 }
 
-//////////////////// Crear Biblioteca ////////////////////
-// Para crear la biblioteca solo es necesario el nombre que tendra
-async function crearBiblioteca(n_biblioteca) {
-  const [pda_biblioteca] = pdaBiblioteca(n_biblioteca); // Primero se obtiene la cuenta de la biblioteca
-
-  const txHash = await pg.program.methods // mediante la libreria pg (solana playground) se acceden a los metodos del programa
-    .crearBiblioteca(n_biblioteca) // crear biblioteca
-    .accounts({
-      // Se agregan las cuentas de las que depende (Contexto del struct NuevaBiblioteca)
-      owner: owner,
-      biblioteca: pda_biblioteca,
-    })
-    .rpc();
-
-  console.log("txHash: ", txHash);
+//////////////////// PDA Miembro ////////////////////
+function pdaMiembro(nombre_miembro) {
+  return PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("miembro"),        // Semilla 1: b"miembro"
+      Buffer.from(nombre_miembro),   // Semilla 2: nombre del miembro -> String
+      owner.toBuffer(),              // Semilla 3: wallet del owner -> Pubkey
+    ],
+    pg.PROGRAM_ID
+  );
 }
 
-//////////////////// Agregar Libro ////////////////////
-// Para crear un libro solo es necesario pasar el libro y el numero de paginas. El estado se define automaticamente en el programa
-async function agregarLibro(n_libro, paginas) {
-  // Agregar Libro
-  const [pda_libro] = pdaLibro(n_libro); // se determina la cuenta del libro
-  const [pda_biblioteca] = pdaBiblioteca(n_biblioteca); // se obtiene la cuenta de la biblioteca
+//////////////////// FUNCIONES ////////////////////
+
+//////////////////// Crear Gimnasio ////////////////////
+// Registra un nuevo gimnasio en la blockchain vinculado a tu wallet
+async function crearGimnasio(nombre_gym) {
+  const [pda_gimnasio] = pdaGimnasio(nombre_gym);
 
   const txHash = await pg.program.methods
-    .agregarLibro(n_libro, paginas) // agregar_libro
+    .crearGimnasio(nombre_gym)
     .accounts({
-      // cuentas del contexto
       owner: owner,
-      libro: pda_libro,
-      biblioteca: pda_biblioteca,
+      gimnasio: pda_gimnasio,
     })
     .rpc();
 
-  console.log("txHash: ", txHash);
+  console.log("Gimnasio creado! txHash:", txHash);
 }
 
-//////////////////// Alternar estado ////////////////////
-// Para cambiar el estado de true a false o visceversa solo se necesita el nombre del libro
-async function cambiarEstado(n_libro) {
-  // Modificar Libro
-  const [pda_libro] = pdaLibro(n_libro); // se determina la cuenta del libro
-  const [pda_biblioteca] = pdaBiblioteca(n_biblioteca); // se obtiene la cuenta de la biblioteca
+//////////////////// Registrar Miembro ////////////////////
+// Agrega un nuevo miembro con nombre y días de membresía
+async function registrarMiembro(nombre_miembro, dias) {
+  const [pda_miembro] = pdaMiembro(nombre_miembro);
+  const [pda_gimnasio] = pdaGimnasio(nombre_gimnasio);
 
   const txHash = await pg.program.methods
-    .alternarEstado(n_libro) // alternar_estado
+    .registrarMiembro(nombre_miembro, dias)
     .accounts({
-      // cuentas del contexto
       owner: owner,
-      libro: pda_libro,
-      biblioteca: pda_biblioteca,
+      miembro: pda_miembro,
+      gimnasio: pda_gimnasio,
     })
     .rpc();
 
-  console.log("txHash: ", txHash);
+  console.log(`Miembro '${nombre_miembro}' registrado! txHash:`, txHash);
 }
 
-//////////////////// Eliminar Libro ////////////////////
-// Para eliminar un libro solo es necesario proporcionar el nombre del libro a eliminar de la biblioteca
-async function eliminarLibro(n_libro) {
-  // Eliminar Libro
-  const [pda_libro] = pdaLibro(n_libro); // se determina la cuenta del libro
-  const [pda_biblioteca] = pdaBiblioteca(n_biblioteca); // se obtiene la cuenta de la biblioteca
+//////////////////// Alternar Membresía ////////////////////
+// Activa o desactiva la membresía de un miembro
+async function alternarMembresia(nombre_miembro) {
+  const [pda_miembro] = pdaMiembro(nombre_miembro);
+  const [pda_gimnasio] = pdaGimnasio(nombre_gimnasio);
+
   const txHash = await pg.program.methods
-    .eliminarLibro(n_libro) // eliminar_libro
+    .alternarMembresia(nombre_miembro)
     .accounts({
-      // cuentas del contexto
       owner: owner,
-      libro: pda_libro,
-      biblioteca: pda_biblioteca,
+      miembro: pda_miembro,
+      gimnasio: pda_gimnasio,
     })
     .rpc();
 
-  console.log("txHash: ", txHash);
+  console.log(`Membresía de '${nombre_miembro}' alternada! txHash:`, txHash);
 }
 
-//////////////////// Ver Libros ////////////////////
+//////////////////// Actualizar Días ////////////////////
+// Renueva o modifica los días de membresía de un miembro
+async function actualizarDias(nombre_miembro, nuevos_dias) {
+  const [pda_miembro] = pdaMiembro(nombre_miembro);
+  const [pda_gimnasio] = pdaGimnasio(nombre_gimnasio);
+
+  const txHash = await pg.program.methods
+    .actualizarDias(nombre_miembro, nuevos_dias)
+    .accounts({
+      owner: owner,
+      miembro: pda_miembro,
+      gimnasio: pda_gimnasio,
+    })
+    .rpc();
+
+  console.log(`Días de '${nombre_miembro}' actualizados a ${nuevos_dias}! txHash:`, txHash);
+}
+
+//////////////////// Eliminar Miembro ////////////////////
+// Da de baja al miembro y cierra su cuenta (se recupera el rent)
+async function eliminarMiembro(nombre_miembro) {
+  const [pda_miembro] = pdaMiembro(nombre_miembro);
+  const [pda_gimnasio] = pdaGimnasio(nombre_gimnasio);
+
+  const txHash = await pg.program.methods
+    .eliminarMiembro(nombre_miembro)
+    .accounts({
+      owner: owner,
+      miembro: pda_miembro,
+      gimnasio: pda_gimnasio,
+    })
+    .rpc();
+
+  console.log(`Miembro '${nombre_miembro}' eliminado! txHash:`, txHash);
+}
+
+//////////////////// Ver Miembros ////////////////////
 /*
- Anteriormente, en la version anterior de la biblioteca, esta instruccion se encotraba implementada dentro del Solana Program, pero... ¿porque ya no?
- En la prinmera version de la biblioteca los libros eran structs contenidos en un vector dentro de la cuenta biblioteca. Al ser elementos de un vector 
- su visualizacion era mas simple. En este caso, cada libro se encuentra definido por una cuenta, por lo que visualizar informacion de multiples cuentas 
- desde el Solana Program es ineficiente a comparacion de hacerlo desde el frontend. 
-
-Para lograr hacerlo es necesario realizar los siguientes pasos:
-
-1. Determinar el PDA de la biblioteca 
-2. Obtener el vector de libros (direcciones)
-3. Por cada direccion, obtener la informacion del libro 
-4. Mostrarla con console.log
+  Leer datos de múltiples cuentas se hace desde el cliente, no desde el programa,
+  porque es más eficiente. Obtenemos el vector de PDAs del gimnasio y luego
+  consultamos los datos de cada miembro individualmente.
 */
-async function verLibros(n_biblioteca) {
-  // Ver Libros
-  const [pda_biblioteca] = pdaBiblioteca(n_biblioteca); // se obtiene la cuenta de la biblioteca
+async function verMiembros() {
+  const [pda_gimnasio] = pdaGimnasio(nombre_gimnasio);
 
   try {
-    // Se accede a los datos de la cuenta (biblioteca)
-    const bibliotecaAccount = await pg.program.account.biblioteca.fetch(
-      pda_biblioteca
-    );
+    const gimnasioAccount = await pg.program.account.gimnasio.fetch(pda_gimnasio);
+    const total = gimnasioAccount.miembros.length;
 
-    // Mediante el .length se obtiene el tamaño del vector de libros en laa biblioteca
-    const numero_libros = bibliotecaAccount.libros.length;
-
-    // Se verifican si hay libros en el vector
-    if (!bibliotecaAccount.libros || numero_libros === 0) {
-      console.log("Biblioteca vacía");
+    if (!gimnasioAccount.miembros || total === 0) {
+      console.log("El gimnasio no tiene miembros registrados.");
       return;
     }
 
-    // Se imprime el valor en la consola
-    console.log("Cantidad de libros:", numero_libros);
+    console.log(`Gimnasio: ${gimnasioAccount.nombre}`);
+    console.log(`Total de miembros: ${total}`);
+    console.log("-------------------------------");
 
-    // Se itera cada cuenta (libro) del vector (biblioteca) y se obtiene la informacion asociada
-    for (let i = 0; i < numero_libros; i++) {
-      const libroKey = bibliotecaAccount.libros[i];
+    for (let i = 0; i < total; i++) {
+      const miembroKey = gimnasioAccount.miembros[i];
+      const miembroAccount = await pg.program.account.miembro.fetch(miembroKey);
 
-      const libroAccount = await pg.program.account.libro.fetch(libroKey);
-
-      // Finaliza mostrando en la terminal la informacion de cada libro
       console.log(
-        `Libro #${i + 1}: \n * Nombre: ${libroAccount.nombre} \n * Páginas: ${
-          libroAccount.paginas
-        } \n * Biblioteca: ${
-          libroAccount.biblioteca
-        } \n * Disponible: ${
-          libroAccount.disponible
-        } \n * Dirección(PDA): ${libroKey.toBase58()}`
+        `Miembro #${i + 1}:
+  * Nombre: ${miembroAccount.nombre}
+  * Días restantes: ${miembroAccount.diasRestantes}
+  * Membresía activa: ${miembroAccount.activo}
+  * PDA: ${miembroKey.toBase58()}`
       );
     }
   } catch (error) {
-    console.error("Error viendo libros:", error);
-
-    // Debugging adicional
-    if (error.message) {
-      console.error("Mensaje de error:", error.message);
-    }
-    if (error.logs) {
-      console.error("Logs del programa:", error.logs);
-    }
+    console.error("Error al ver miembros:", error.message);
   }
 }
 
-// crearBiblioteca(n_biblioteca);
-// agregarLibro("El alquimista", 255);
-// eliminarLibro("El alquimista");
-// cambiarEstado("El alquimista");
-// verLibros(n_biblioteca);
+//////////////////// USO — Descomenta lo que quieras probar ////////////////////
+/*
+  FLUJO RECOMENDADO:
+  1. Primero crea el gimnasio (solo una vez)
+  2. Luego registra miembros
+  3. Puedes ver, alternar, actualizar o eliminar según necesites
+*/
 
-// solana confirm -v <txHash>
+// crearGimnasio(nombre_gimnasio);
+// registrarMiembro("Juan", 30);
+// registrarMiembro("Ana", 60);
+// verMiembros();
+// alternarMembresia("Juan");       // desactiva membresía de Juan
+// actualizarDias("Ana", 90);       // renueva a 90 días
+// eliminarMiembro("Juan");
+// verMiembros();
