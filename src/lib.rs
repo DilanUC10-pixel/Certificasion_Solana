@@ -1,244 +1,281 @@
 use anchor_lang::prelude::*;
 
-declare_id!("GkW8S8pj6ZJAfAETJmcuLn5cABBUrt6X8udYVRHyeJar");
+declare_id!("GkW8S8pj6ZJAfAETJmcuLn5cABBUrt6X8udYVRHyeJar"); // Reemplaza con tu program ID al deployar
 
-#[program] // El codigo empieza desde aqui
-pub mod biblioteca {
-    use super::*; // Importa todas los structs y enums definidos fuera del modulo
+#[program] // El programa comienza aquí
+pub mod gymchain {
+    use super::*;
 
     /////////////////////////// INSTRUCCIONES ///////////////////////////
-    /////////////////////////// Crear Biblioteca ///////////////////////////
-    pub fn crear_biblioteca(context: Context<NuevaBiblioteca>, n_biblioteca: String) -> Result<()> {
 
-        let owner_id = context.accounts.owner.key(); // caller wallet 
+    /////////////////////////// Crear Gimnasio ///////////////////////////
+    /// Registra un nuevo gimnasio en la blockchain.
+    /// Solo el owner puede administrarlo después.
+    pub fn crear_gimnasio(context: Context<NuevoGimnasio>, nombre: String) -> Result<()> {
+        let owner_id = context.accounts.owner.key();
 
-        let libros = Vec::<Pubkey>::new(); // crear un vector vacio 
+        let miembros = Vec::<Pubkey>::new(); // Lista vacía de miembros al inicio
 
-        context.accounts.biblioteca.set_inner(Biblioteca { 
+        context.accounts.gimnasio.set_inner(Gimnasio {
             owner: owner_id,
-            n_biblioteca: n_biblioteca.clone(),
-            libros,
-        }); // crear el struct de la biblioteca, lo serializa y lo guarda en el espacio de la cuenta (su uso se recomienda cuando se crea una cuenta)
+            nombre: nombre.clone(),
+            miembros,
+        });
 
-        msg!("Biblioteca {}, creada exitosamente!. Owner id: {}", n_biblioteca.clone(), owner_id); // Log de verificacion
+        msg!(
+            "Gimnasio '{}' creado exitosamente! Owner: {}",
+            nombre,
+            owner_id
+        );
 
         Ok(())
     }
 
-    /////////////////////////// Nuevo Libro ///////////////////////////
-    pub fn agregar_libro(context: Context<NuevoLibro>, nombre: String, paginas: u16) -> Result<()> {
-        
+    /////////////////////////// Registrar Miembro ///////////////////////////
+    /// Agrega un nuevo miembro al gimnasio con su plan de membresía.
+    /// Solo el owner del gimnasio puede registrar miembros.
+    pub fn registrar_miembro(
+        context: Context<NuevoMiembro>,
+        nombre: String,
+        dias_restantes: u16,
+    ) -> Result<()> {
+        // Solo el owner del gimnasio puede registrar miembros
         require!(
-            context.accounts.biblioteca.owner == context.accounts.owner.key(),
+            context.accounts.gimnasio.owner == context.accounts.owner.key(),
             Errores::NoEresElOwner
-        ); // Medida de seguridad 
+        );
 
-        let libro = Libro {
-            biblioteca: context.accounts.biblioteca.n_biblioteca.clone(),
+        let miembro = Miembro {
+            gimnasio: context.accounts.gimnasio.nombre.clone(),
             nombre: nombre.clone(),
-            paginas,
-            disponible: true,
-        }; // Creacion del struct libro 
+            dias_restantes,
+            activo: true, // Al registrarse, la membresía comienza activa
+        };
 
-        context.accounts.libro.set_inner(libro); // Serializa y guarda el struct en el espacio de la cuenta
+        context.accounts.miembro.set_inner(miembro);
 
+        // Guardamos la referencia (PDA) del miembro en el gimnasio
         context
             .accounts
-            .biblioteca
-            .libros
-            .push(context.accounts.libro.key()); // Agrega el PDA del libro al vector de libros de biblioteca
+            .gimnasio
+            .miembros
+            .push(context.accounts.miembro.key());
 
-        msg!("Libro {}, creado exitosamente, en la biblioteca {}!. Owner id: {}", nombre.clone(),  context.accounts.biblioteca.n_biblioteca, context.accounts.owner.key()); // Log de verificacion
-    
-        Ok(())
-    }
-
-    /////////////////////////// Eliminar Libro ///////////////////////////
-    pub fn eliminar_libro(context: Context<EliminarLibro>, nombre: String) -> Result<()> {
-        require!(
-            context.accounts.biblioteca.owner == context.accounts.owner.key(),
-            Errores::NoEresElOwner
-        ); // Medida de seguridad 
-
-        let biblioteca = &mut context.accounts.biblioteca;
-        let libros = &biblioteca.libros;
-
-        // Verificar que el libro pertenece a esta biblioteca
-        require!(
-            context.accounts.libro.biblioteca == biblioteca.n_biblioteca,
-            Errores::LibroNoPertenece
-        );
-
-        require!(biblioteca.libros.contains(&context.accounts.libro.key()), Errores::LibroNoExiste);
-
-        let mut pos = 0;
-
-        for i in 0..libros.len() {
-            if libros[i] == context.accounts.libro.key() {
-                pos = i;
-                break
-            }
-        }
-
-        // Alternativa mas directa:
-        // let pos = biblioteca
-        //     .libros
-        //     .iter()
-        //     .position(|&x| x == context.accounts.libro.key())
-        //     .ok_or(Errores::LibroNoExiste)?;
-
-        biblioteca.libros.remove(pos);
-
-        // La cuenta del libro se cierra automáticamente por Anchor debido a 'close = owner'
-        msg!("Libro '{}' eliminado exitosamente de la biblioteca {}!. Owner id: {}", nombre, biblioteca.n_biblioteca, context.accounts.owner.key());
-            
-        Ok(())
-    }
-
-    /////////////////////////// Alternar Estado ///////////////////////////
-    pub fn alternar_estado(context: Context<ModificarLibro>, nombre: String) -> Result<()> {
-        require!(
-            context.accounts.biblioteca.owner == context.accounts.owner.key(),
-            Errores::NoEresElOwner
-        );
-
-        let libro = &mut context.accounts.libro;
-        let estado = libro.disponible;
-        let nuevo_estado = !estado;
-        libro.disponible = nuevo_estado;
-        
         msg!(
-            "El libro: {} ahora tiene un valor de disponibilidad: {}",
+            "Miembro '{}' registrado en '{}' con {} días de membresía. Owner: {}",
             nombre,
-            nuevo_estado
+            context.accounts.gimnasio.nombre,
+            dias_restantes,
+            context.accounts.owner.key()
+        );
+
+        Ok(())
+    }
+
+    /////////////////////////// Eliminar Miembro ///////////////////////////
+    /// Da de baja a un miembro del gimnasio y cierra su cuenta.
+    /// Solo el owner puede eliminar miembros.
+    pub fn eliminar_miembro(context: Context<EliminarMiembro>, nombre: String) -> Result<()> {
+        require!(
+            context.accounts.gimnasio.owner == context.accounts.owner.key(),
+            Errores::NoEresElOwner
+        );
+
+        let gimnasio = &mut context.accounts.gimnasio;
+
+        // Verificamos que el miembro pertenece a este gimnasio
+        require!(
+            context.accounts.miembro.gimnasio == gimnasio.nombre,
+            Errores::MiembroNoPerteneceAlGimnasio
+        );
+
+        require!(
+            gimnasio.miembros.contains(&context.accounts.miembro.key()),
+            Errores::MiembroNoExiste
+        );
+
+        // Buscamos la posición del miembro en el vector
+        let pos = gimnasio
+            .miembros
+            .iter()
+            .position(|&x| x == context.accounts.miembro.key())
+            .ok_or(Errores::MiembroNoExiste)?;
+
+        gimnasio.miembros.remove(pos);
+
+        // La cuenta del miembro se cierra automáticamente por Anchor (close = owner)
+        msg!(
+            "Miembro '{}' eliminado del gimnasio '{}'. Owner: {}",
+            nombre,
+            gimnasio.nombre,
+            context.accounts.owner.key()
+        );
+
+        Ok(())
+    }
+
+    /////////////////////////// Alternar Membresía ///////////////////////////
+    /// Activa o desactiva la membresía de un miembro (ej: si no ha pagado).
+    /// Solo el owner puede modificar el estado.
+    pub fn alternar_membresia(context: Context<ModificarMiembro>, nombre: String) -> Result<()> {
+        require!(
+            context.accounts.gimnasio.owner == context.accounts.owner.key(),
+            Errores::NoEresElOwner
+        );
+
+        let miembro = &mut context.accounts.miembro;
+        let nuevo_estado = !miembro.activo;
+        miembro.activo = nuevo_estado;
+
+        msg!(
+            "Membresía de '{}' actualizada a: {}",
+            nombre,
+            if nuevo_estado { "ACTIVA" } else { "INACTIVA" }
+        );
+
+        Ok(())
+    }
+
+    /////////////////////////// Actualizar Días ///////////////////////////
+    /// Actualiza los días restantes de la membresía de un miembro (ej: renovación).
+    /// Solo el owner puede actualizar los días.
+    pub fn actualizar_dias(
+        context: Context<ModificarMiembro>,
+        nombre: String,
+        nuevos_dias: u16,
+    ) -> Result<()> {
+        require!(
+            context.accounts.gimnasio.owner == context.accounts.owner.key(),
+            Errores::NoEresElOwner
+        );
+
+        let miembro = &mut context.accounts.miembro;
+        miembro.dias_restantes = nuevos_dias;
+
+        msg!(
+            "Días de membresía de '{}' actualizados a: {} días",
+            nombre,
+            nuevos_dias
         );
 
         Ok(())
     }
 }
-/////////////////////////// Codigos de Error ///////////////////////////
+
+/////////////////////////// CÓDIGOS DE ERROR ///////////////////////////
 #[error_code]
 pub enum Errores {
-    #[msg("Error, no eres el propietario de la biblioteca que deseas modificar")]
+    #[msg("Error: no eres el propietario del gimnasio")]
     NoEresElOwner,
-    #[msg("Error, el libro con el que deseas interactuar no existe")]
-    LibroNoExiste,
-    #[msg("Error, el libro no pertenece a esta biblioteca")]
-    LibroNoPertenece,
+    #[msg("Error: el miembro no existe en este gimnasio")]
+    MiembroNoExiste,
+    #[msg("Error: el miembro no pertenece a este gimnasio")]
+    MiembroNoPerteneceAlGimnasio,
 }
 
+/////////////////////////// STRUCTS / CUENTAS ///////////////////////////
 
-/////////////////////////// CUENTAS ///////////////////////////
-/////////////////////////// Biblioteca ///////////////////////////
-
+/// Cuenta principal del gimnasio.
+/// Se crea una vez por owner y guarda la lista de PDAs de sus miembros.
 #[account]
 #[derive(InitSpace)]
-pub struct Biblioteca {
-    pub owner: Pubkey,
+pub struct Gimnasio {
+    pub owner: Pubkey, // Wallet del dueño del gimnasio
 
     #[max_len(60)]
-    pub n_biblioteca: String,
+    pub nombre: String, // Nombre del gimnasio
 
-    #[max_len(10)]
-    pub libros: Vec<Pubkey>,
+    #[max_len(50)]
+    pub miembros: Vec<Pubkey>, // Lista de PDAs de miembros (máx 50)
 }
 
-/////////////////////////// Libro ///////////////////////////
-
+/// Cuenta de cada miembro del gimnasio.
+/// Se crea una PDA única por miembro usando su nombre y el owner como seeds.
 #[account]
-#[derive(InitSpace, PartialEq, Debug)]
-pub struct Libro {
+#[derive(InitSpace)]
+pub struct Miembro {
     #[max_len(60)]
-    pub biblioteca: String,
+    pub gimnasio: String, // Nombre del gimnasio al que pertenece
 
     #[max_len(60)]
-    pub nombre: String,
+    pub nombre: String, // Nombre del miembro
 
-    pub paginas: u16,
+    pub dias_restantes: u16, // Días de membresía restantes
 
-    pub disponible: bool,
+    pub activo: bool, // Si la membresía está activa o no
 }
-
 
 /////////////////////////// CONTEXTOS ///////////////////////////
-/////////////////////////// Nueva Biblioteca ///////////////////////////
-/// Instruccion: crear_biblioteca
 
-
+/// Contexto para crear un gimnasio.
+/// PDA: ["gimnasio", nombre, owner_pubkey]
 #[derive(Accounts)]
-#[instruction(n_biblioteca:String)]
-pub struct NuevaBiblioteca<'info> {
+#[instruction(nombre: String)]
+pub struct NuevoGimnasio<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
     #[account(
         init,
-        payer = owner, 
-        space = 8 + Biblioteca::INIT_SPACE, 
-        seeds = [b"biblioteca", n_biblioteca.as_bytes(), owner.key().as_ref()],
+        payer = owner,
+        space = 8 + Gimnasio::INIT_SPACE,
+        seeds = [b"gimnasio", nombre.as_bytes(), owner.key().as_ref()],
         bump
     )]
-    pub biblioteca: Account<'info, Biblioteca>,
+    pub gimnasio: Account<'info, Gimnasio>,
 
     pub system_program: Program<'info, System>,
 }
 
-/////////////////////////// NuevoLibro ///////////////////////////
-/// Instruccion: agregar_libro
-
-
+/// Contexto para registrar un miembro en el gimnasio.
+/// PDA del miembro: ["miembro", nombre, owner_pubkey]
 #[derive(Accounts)]
-#[instruction(nombre:String)]
-pub struct NuevoLibro<'info> {
+#[instruction(nombre: String)]
+pub struct NuevoMiembro<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
     #[account(
         init,
-        payer = owner, 
-        space = 8 + Libro::INIT_SPACE,
-        seeds = [b"libro", nombre.as_bytes(), owner.key().as_ref()],
+        payer = owner,
+        space = 8 + Miembro::INIT_SPACE,
+        seeds = [b"miembro", nombre.as_bytes(), owner.key().as_ref()],
         bump
     )]
-    pub libro: Account<'info, Libro>,
+    pub miembro: Account<'info, Miembro>,
 
     #[account(mut)]
-    pub biblioteca: Account<'info, Biblioteca>,
+    pub gimnasio: Account<'info, Gimnasio>,
 
     pub system_program: Program<'info, System>,
 }
 
-
-/////////////////////////// Modificar Libro ///////////////////////////
-/// Instruccion: alternar_estado (tambien puede servir para funciones relacionadas con cambiar nombre, numero de paginas o alguna otra variable contenida en el struct Lbro)
-
-
+/// Contexto para modificar un miembro (alternar membresía o actualizar días).
 #[derive(Accounts)]
-pub struct ModificarLibro<'info> {
+pub struct ModificarMiembro<'info> {
     pub owner: Signer<'info>,
 
     #[account(mut)]
-    pub libro: Account<'info, Libro>,
+    pub miembro: Account<'info, Miembro>,
 
     #[account(mut)]
-    pub biblioteca: Account<'info, Biblioteca>,
+    pub gimnasio: Account<'info, Gimnasio>,
 }
 
-/////////////////////////// Eliminar Libro ///////////////////////////
-///  Instruccion: eliminar_libro -> cierra la cuenta 
-
+/// Contexto para eliminar un miembro.
+/// Al cerrarse la cuenta (close = owner), el rent se devuelve al owner.
 #[derive(Accounts)]
-pub struct EliminarLibro<'info> {
+pub struct EliminarMiembro<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
     #[account(
         mut,
         close = owner,
-        constraint = libro.biblioteca == biblioteca.n_biblioteca @ Errores::LibroNoPertenece
+        constraint = miembro.gimnasio == gimnasio.nombre @ Errores::MiembroNoPerteneceAlGimnasio
     )]
-    pub libro: Account<'info, Libro>,
+    pub miembro: Account<'info, Miembro>,
 
     #[account(mut)]
-    pub biblioteca: Account<'info, Biblioteca>,
+    pub gimnasio: Account<'info, Gimnasio>,
 }
